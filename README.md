@@ -27,6 +27,20 @@ service_tier = "default"
 
 Start a new Codex task after installation. A full application restart is normally unnecessary.
 
+## Tokenomics routing
+
+Tokenomics uses a simple “smallest capable model” rule. It does not automatically change the selected model; on a nontrivial task it may recommend a manual switch when another tier is clearly a better fit.
+
+| Model | Use it for |
+| --- | --- |
+| Luna | Straightforward, bounded work: searching or reading files, summaries, mechanical edits, formatting, repetitive transformations, and simple implementations. |
+| Terra | Moderate debugging, multi-file implementation, reviewing Luna-sized work, or moderate ambiguity and judgment. |
+| Sol | Planning and architecture, difficult debugging, security-sensitive reasoning, consequential review, integrating delegated results, and genuinely ambiguous work. |
+
+Prefer the escalation path Luna → Terra → Sol. Do not delegate or switch for a trivial task when the context/switch overhead costs more than it saves. If a weaker model is clearly mismatched, move up one tier rather than retrying it repeatedly.
+
+Use `$tokenomics` when you specifically want a fresh routing assessment, such as after a task’s scope changes. You do not need to invoke it on every task: the global `AGENTS.md` contains the same routing checkpoint.
+
 ## Rollback
 
 Use ordinary Git history to select the desired configuration version, then rerun `install.ps1`. The installer’s timestamped backup provides a local pre-install copy when needed.
