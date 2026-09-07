@@ -1,0 +1,6 @@
+interface:
+  display_name: "Tokenomics"
+  short_description: "Route bounded work to cheaper Codex models"
+  default_prompt: "Use $tokenomics to route this task efficiently."
+policy:
+  allow_implicit_invocation: true

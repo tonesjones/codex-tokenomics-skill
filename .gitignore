@@ -1,0 +1,11 @@
+# Allowlist: everything is ignored unless explicitly listed below.
+*
+!.gitignore
+!README.md
+!install.ps1
+!AGENTS.md
+!skills/
+!skills/tokenomics/
+!skills/tokenomics/SKILL.md
+!skills/tokenomics/agents/
+!skills/tokenomics/agents/openai.yaml
