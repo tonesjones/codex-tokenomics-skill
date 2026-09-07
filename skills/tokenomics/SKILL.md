@@ -12,6 +12,7 @@ Apply the global model-routing policy in `~/.codex/AGENTS.md`.
 - Use Luna for clear, bounded, low-ambiguity worker tasks.
 - Use Terra for moderately complex or judgment-bearing worker tasks.
 - Keep planning, architecture, hard debugging, security-sensitive reasoning, integration, and consequential final judgment in Sol.
+- Recommend Astra only for the hardest end-to-end work or unusually large/long-horizon tasks when its higher cost is justified by likely quality or rework savings; do not treat Astra as the default.
 - Escalate Luna to Terra, then Terra to Sol, when evidence shows the weaker model is mismatched. Do not churn retries.
 - When selecting a child model explicitly, use a self-contained prompt with `fork_turns="none"` or a small positive `fork_turns` value; full-history forks inherit the parent and cannot take a model override.
 - Treat recorded child-session model metadata as authoritative. An accepted spawn argument alone is not proof that the override took effect, and the child’s prose is not model evidence.

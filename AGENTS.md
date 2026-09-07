@@ -37,6 +37,7 @@ For independent, bounded work where delegation pays off, prefer this escalation 
 1. Luna (`gpt-5.6-luna`) for codebase exploration, file reading and information collection, summaries, mechanical edits, simple implementations, formatting, command execution, repetitive transformations, and other clear low-ambiguity tasks.
 2. Terra (`gpt-5.6-terra`) for moderate debugging, multi-file implementations, judgment-bearing reviews or corrections of Luna output, and moderately ambiguous implementation work.
 3. Sol (`gpt-5.6-sol`) for decomposition, architecture, ambiguity, difficult debugging, security-sensitive reasoning, integration, consequential review, and final judgment.
+4. Astra (`gpt-6-astra`) only for the hardest end-to-end work: unusually long-horizon or cross-domain tasks, very large context, or cases where avoiding multiple Sol passes is worth Astra’s higher cost. Astra is an exception tier, not the default replacement for Sol.
 
 Use an explicit child model override when the collaboration tool supports one. Because model overrides are incompatible with full-history forks in the current runtime, pass only the minimum useful recent context with a positive `fork_turns` value, or use `fork_turns="none"` and write a self-contained task. Treat recorded child-session model metadata as authoritative; an accepted spawn argument alone is not proof that the override took effect. Never claim a child used Luna or Terra unless runtime metadata confirms it.
 

@@ -36,8 +36,9 @@ Tokenomics uses a simple “smallest capable model” rule. It does not automati
 | Luna | Straightforward, bounded work: searching or reading files, summaries, mechanical edits, formatting, repetitive transformations, and simple implementations. |
 | Terra | Moderate debugging, multi-file implementation, reviewing Luna-sized work, or moderate ambiguity and judgment. |
 | Sol | Planning and architecture, difficult debugging, security-sensitive reasoning, consequential review, integrating delegated results, and genuinely ambiguous work. |
+| Astra | Hardest end-to-end work, unusually long-horizon or cross-domain tasks, very large context, or work where avoiding multiple Sol passes justifies the higher cost. Astra is an exception tier, not the default. |
 
-Prefer the escalation path Luna → Terra → Sol. Do not delegate or switch for a trivial task when the context/switch overhead costs more than it saves. If a weaker model is clearly mismatched, move up one tier rather than retrying it repeatedly.
+Prefer the escalation path Luna → Terra → Sol, with Astra as a selective exception above Sol. Do not delegate or switch for a trivial task when the context/switch overhead costs more than it saves. If a weaker model is clearly mismatched, move up one tier rather than retrying it repeatedly.
 
 Use `$tokenomics` when you specifically want a fresh routing assessment, such as after a task’s scope changes. You do not need to invoke it on every task: the global `AGENTS.md` contains the same routing checkpoint.
 
