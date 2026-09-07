@@ -7,6 +7,7 @@ description: Route substantial Codex work among Luna, Terra, and Sol when bounde
 
 Apply the global model-routing policy in `~/.codex/AGENTS.md`.
 
+- At the first meaningful planning checkpoint, recommend a manual switch when the active model is clearly too strong or too weak for a nontrivial task. Give the recommended model and one short reason; do not block progress or repeat the recommendation without a material scope change.
 - First compare expected savings with delegation and context overhead. Do small tasks directly.
 - Use Luna for clear, bounded, low-ambiguity worker tasks.
 - Use Terra for moderately complex or judgment-bearing worker tasks.

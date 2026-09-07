@@ -28,6 +28,8 @@ When suggesting improvements, separate needed now from nice later.
 Model routing and delegation
 When the active model is Sol, treat Sol as the orchestrator for difficult work, while retaining final responsibility for correctness and integration.
 
+For work that needs more than an immediate answer, pause after brief intake and before substantial implementation to make a routing recommendation when the active model is clearly mismatched. State the recommended model and a short reason, for example: “This is straightforward bounded work; Luna would be the more efficient choice. Switch to Luna?” A recommendation is optional for the user and must not block the task. Do not recommend a switch for trivial work, when switching would cost more context than it saves, or repeatedly unless the scope materially changes.
+
 Before delegating, decide whether expected savings in tokens, credits, or elapsed time exceed the context and coordination overhead. Complete small tasks directly. Do not create subagents merely because they are available, split work into tiny tasks, or delegate work that is tightly coupled to the parent’s evolving reasoning.
 
 For independent, bounded work where delegation pays off, prefer this escalation path:
