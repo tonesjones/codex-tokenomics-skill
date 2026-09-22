@@ -1,6 +1,6 @@
 ---
 name: tokenomics
-description: Route substantial Codex work among GPT-6 Luna, GPT-6 Sol, and GPT-6 Astra when switching or bounded delegation can reduce cost or time without reducing correctness. Skip small or tightly coupled work.
+description: Recommend and verify cost-aware routing among GPT-6 Luna, GPT-6 Sol, and GPT-6 Astra when switching or bounded delegation can reduce cost or time without reducing correctness. Applies to substantial tasks; skip small or tightly coupled work.
 ---
 
 # Tokenomics
@@ -16,4 +16,8 @@ Apply the global model-routing policy in `~/.codex/AGENTS.md`.
 - When selecting a child model explicitly, use a self-contained prompt with `fork_turns="none"` or a small positive `fork_turns` value; full-history forks inherit the parent and cannot take a model override.
 - Treat recorded child-session model metadata as authoritative. An accepted spawn argument alone is not proof that the override took effect, and the child’s prose is not model evidence.
 
-This skill guides decisions; it does not require delegation and does not authorize unrelated work. Poteto Mode's Codex harness guidance reads `~/.agents/pstack-models.md` when present to set per-role model choices. This repository's installer copies `pstack-models.md` there.
+Top-level model switches are advisory and require the user or runtime to apply them. Child-model selection is an attempt until recorded child-session metadata confirms the model that ran.
+
+This skill does not require delegation, guarantee model selection, or authorize unrelated work.
+
+Poteto Mode's Codex guidance reads `~/.agents/pstack-models.md` when present to set per-role model choices. This repository's installer copies `pstack-models.md` there.
