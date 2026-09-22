@@ -36,26 +36,32 @@ $configTarget = Join-Path $codexRoot 'config.toml'
 $skillRoot = Join-Path $codexRoot 'skills'
 $tokenomicsTarget = Join-Path $skillRoot 'tokenomics'
 $legacyTarget = Join-Path $skillRoot 'cost-aware-delegation'
+$pstackRoot = Join-Path $env:USERPROFILE '.agents'
+$pstackTarget = Join-Path $pstackRoot 'pstack-models.md'
 
 Backup-Path $agentsTarget
 Backup-Path $configTarget
 Backup-Path $tokenomicsTarget
 Backup-Path $legacyTarget
+Backup-Path $pstackTarget
 
 Copy-Item -LiteralPath (Join-Path $repoRoot 'AGENTS.md') -Destination $agentsTarget -Force
 New-Item -ItemType Directory -Path $skillRoot -Force | Out-Null
 if (Test-Path -LiteralPath $tokenomicsTarget) { Remove-Item -LiteralPath $tokenomicsTarget -Recurse -Force }
 Copy-Item -LiteralPath (Join-Path $repoRoot 'skills\tokenomics') -Destination $tokenomicsTarget -Recurse -Force
 if (Test-Path -LiteralPath $legacyTarget) { Remove-Item -LiteralPath $legacyTarget -Recurse -Force }
+New-Item -ItemType Directory -Path $pstackRoot -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $repoRoot 'pstack-models.md') -Destination $pstackTarget -Force
 
 $configText = if (Test-Path -LiteralPath $configTarget) { Get-Content -Raw -LiteralPath $configTarget } else { '' }
-$configText = Set-TopLevelTomlValue $configText 'model' '"gpt-5.6-sol"'
+$configText = Set-TopLevelTomlValue $configText 'model' '"gpt-6-sol"'
 $configText = Set-TopLevelTomlValue $configText 'model_reasoning_effort' '"low"'
 $configText = Set-TopLevelTomlValue $configText 'personality' '"pragmatic"'
 $configText = Set-TopLevelTomlValue $configText 'service_tier' '"default"'
 Set-Content -LiteralPath $configTarget -Value $configText -Encoding utf8
 
 Write-Host "Installed AGENTS.md and the tokenomics skill into $codexRoot"
+Write-Host "Installed pstack model roles into $pstackTarget"
 Write-Host "Applied portable model preferences to $configTarget"
 if (Test-Path -LiteralPath $backupRoot) { Write-Host "Previous files were backed up to $backupRoot" }
 Write-Host 'Start a new Codex task to load the updated global guidance and skill catalog.'

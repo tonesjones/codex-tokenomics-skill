@@ -3,7 +3,8 @@
 This repository contains the small, reusable portion of my personal Codex setup:
 
 - `AGENTS.md`: global engineering and model-routing guidance.
-- `skills/tokenomics/`: implicit skill for cost-aware Luna → Terra → Sol routing.
+- `skills/tokenomics/`: implicit skill for cost-aware GPT-6 Luna → GPT-5.6 Terra → GPT-6 Sol routing, with GPT-6 Astra as a selective exception.
+- `pstack-models.md`: Poteto Mode's per-role model configuration, installed to `$env:USERPROFILE\.agents\pstack-models.md`.
 - `install.ps1`: installs those files and applies four portable Codex preferences.
 
 ## Restore on Windows
@@ -19,7 +20,7 @@ The installer targets `$env:CODEX_HOME` when set, otherwise `$env:USERPROFILE\.c
 It also sets these portable top-level preferences in the existing `config.toml` without replacing machine-specific sections:
 
 ```toml
-model = "gpt-5.6-sol"
+model = "gpt-6-sol"
 model_reasoning_effort = "low"
 personality = "pragmatic"
 service_tier = "default"
@@ -33,14 +34,16 @@ Tokenomics uses a simple “smallest capable model” rule. It does not automati
 
 | Model | Use it for |
 | --- | --- |
-| Luna | Straightforward, bounded work: searching or reading files, summaries, mechanical edits, formatting, repetitive transformations, and simple implementations. |
-| Terra | Moderate debugging, multi-file implementation, reviewing Luna-sized work, or moderate ambiguity and judgment. |
-| Sol | Planning and architecture, difficult debugging, security-sensitive reasoning, consequential review, integrating delegated results, and genuinely ambiguous work. |
-| Astra | Hardest end-to-end work, unusually long-horizon or cross-domain tasks, very large context, or work where avoiding multiple Sol passes justifies the higher cost. Astra is an exception tier, not the default. |
+| GPT-6 Luna | Straightforward, bounded work: searching or reading files, summaries, mechanical edits, formatting, repetitive transformations, and simple implementations. |
+| GPT-5.6 Terra | Provisional moderate tier for debugging, multi-file implementation, reviewing Luna-sized work, or moderate ambiguity and judgment. Whether GPT-6 Luna or GPT-6 Sol should replace Terra is undecided. |
+| GPT-6 Sol | Planning and architecture, difficult debugging, security-sensitive reasoning, consequential review, integrating delegated results, and genuinely ambiguous work. |
+| GPT-6 Astra | Hardest end-to-end work, unusually long-horizon or cross-domain tasks, very large context, or work where avoiding multiple Sol passes justifies the higher cost. Astra is an exception tier, not the default. |
 
-Prefer the escalation path Luna → Terra → Sol, with Astra as a selective exception above Sol. Do not delegate or switch for a trivial task when the context/switch overhead costs more than it saves. If a weaker model is clearly mismatched, move up one tier rather than retrying it repeatedly.
+Prefer the escalation path GPT-6 Luna → GPT-5.6 Terra → GPT-6 Sol, with GPT-6 Astra as a selective exception above Sol. Terra remains provisional while the choice between Luna and Sol as its future replacement is undecided. Do not delegate or switch for a trivial task when the context/switch overhead costs more than it saves. If a weaker model is clearly mismatched, move up one tier rather than retrying it repeatedly.
 
 Use `$tokenomics` when you specifically want a fresh routing assessment, such as after a task’s scope changes. You do not need to invoke it on every task: the global `AGENTS.md` contains the same routing checkpoint.
+
+When Poteto Mode is active in Codex, its harness instructions read `~/.agents/pstack-models.md` when present. That file assigns models to Poteto agent roles and overrides its defaults. `install.ps1` copies this repository's `pstack-models.md` to `$env:USERPROFILE\.agents\pstack-models.md`, even when `CODEX_HOME` points elsewhere.
 
 ## Rollback
 
