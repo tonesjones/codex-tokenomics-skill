@@ -1,5 +1,5 @@
 # pstack role defaults for Codex. Tokenomics still decides when delegation pays off and which model can handle the task.
-# GPT-5.6 Terra remains a provisional moderate tier until its replacement is chosen.
+# Astra is an explicit escalation, not a default participant in multi-model roles.
 feature, refactoring: gpt-6-luna
 bug-fix: gpt-6-luna
 perf-issue: gpt-6-luna
@@ -12,8 +12,8 @@ why investigators: gpt-6-luna
 why synthesizer: gpt-6-sol
 reflect tooling: gpt-6-luna
 reflect judgment, divergent, synthesizer: gpt-6-sol
-arena runners: gpt-6-luna, gpt-5.6-terra, gpt-6-sol
-arena cross-judge pool: gpt-6-luna, gpt-5.6-terra, gpt-6-sol
+arena runners: gpt-6-luna, gpt-6-sol
+arena cross-judge pool: gpt-6-luna, gpt-6-sol
 swarm workers: gpt-6-luna
-architect runners: gpt-6-luna, gpt-5.6-terra, gpt-6-sol
-interrogate reviewers: gpt-6-luna, gpt-5.6-terra, gpt-6-sol
+architect runners: gpt-6-luna, gpt-6-sol
+interrogate reviewers: gpt-6-luna, gpt-6-sol
