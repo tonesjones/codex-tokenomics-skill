@@ -1,4 +1,5 @@
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -49,6 +50,24 @@ class TokenomicsRouterTests(unittest.TestCase):
         decision = route_task("Fix typo in README", context={"current_model": "gpt-6-sol"}, config=prices)
         self.assertEqual((decision["candidate_tier"], decision["action"]), ("cheap", "stay"))
         self.assertIsNotNone(decision["estimates"]["cheap"]["parent_overhead_usd"])
+
+    def test_unpriced_substantial_independent_work_can_delegate(self):
+        task = "Summarize test failures"
+        self.assertEqual(route_task(task)["action"], "stay")
+        coupled = route_task(task, context={"work_scope": "substantial", "independent": False})
+        self.assertEqual(coupled["action"], "stay")
+        bounded = route_task(task, context={"work_scope": "substantial", "independent": True})
+        self.assertEqual((bounded["action"], bounded["model"]), ("delegate", "gpt-6-luna"))
+        self.assertIsNone(bounded["estimated_cost_usd"])
+        self.assertIn("dollar savings unverified", bounded["reason"])
+
+    def test_command_line_route(self):
+        script = Path(__file__).parents[1] / "skills" / "tokenomics" / "tokenomics_router.py"
+        result = subprocess.run([sys.executable, str(script), "--current-model", "gpt-6-sol",
+                                 "--work-scope", "substantial", "--independent", "Summarize test failures"],
+                                capture_output=True, text=True, check=True)
+        decision = json.loads(result.stdout)
+        self.assertEqual((decision["action"], decision["model"]), ("delegate", "gpt-6-luna"))
 
     def test_large_cheap_work_delegates_when_savings_survive_handoff(self):
         decision = route_task("Add a unit test", context={"input_tokens": 10000}, config=PRICED)
