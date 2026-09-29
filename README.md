@@ -3,7 +3,7 @@
 This repository contains the small, reusable portion of my personal Codex setup:
 
 - `AGENTS.md`: global engineering and model-routing guidance.
-- `skills/tokenomics/`: implicit skill for cost-aware GPT-6 Luna → GPT-6 Sol → GPT-6 Astra routing.
+- `skills/tokenomics/`: implicit routing guidance plus a dependency-free portable router/cost estimator. Its default tier mapping is GPT-6 Luna → GPT-6 Sol → GPT-6 Astra, but projects can supply their own model IDs and current prices.
 - `pstack-models.md`: Poteto Mode's per-role model configuration, installed to `$env:USERPROFILE\.agents\pstack-models.md`.
 - `install.ps1`: installs those files and applies four portable Codex preferences.
 
@@ -41,6 +41,14 @@ Tokenomics uses a simple “smallest capable model” rule. It does not automati
 Prefer GPT-6 Luna → GPT-6 Sol → GPT-6 Astra. Astra is an exception, not a routine third worker. Do not delegate or switch for a trivial task when context or switch overhead costs more than it saves. If Luna is clearly mismatched, move to Sol rather than retrying it repeatedly. Use Astra only when Sol is struggling or the stakes justify its higher cost.
 
 Use `$tokenomics` when you specifically want a fresh routing assessment, such as after a task’s scope changes. You do not need to invoke it on every task: the global `AGENTS.md` contains the same routing checkpoint.
+
+For a calling project that needs a programmatic decision, copy `skills/tokenomics/tokenomics_router.py` and call `route_task(task, context=None, config=None)`. It selects a configured tier/model and estimates tokens and dollars when the project supplies prices; it does not call a provider. `record_result` can write local JSONL usage, and `summarize_usage` gives a compact feedback loop. See the skill's `SKILL.md` for a minimal example and optional Jev classifier boundary.
+
+### When to add Jev
+
+Start with the local classifier and log the actual results. Jev becomes useful when ambiguous task descriptions repeatedly cause the local rules to choose a tier that is too weak or unnecessarily strong, and there are enough routed tasks for a classification call to repay its cost and latency. For example, a routine task containing the word “architecture” can trigger a strong route, while a hard task phrased like a simple edit can land too low. Review a few dozen representative logged tasks (20–50 is a starting sample, not a proven threshold), compare Jev's classification against the local rule on those same tasks, and enable it only if the decisions improve.
+
+Jev can supply task type, complexity, expected output size, and confidence; Tokenomics still chooses the model and calculates dollars. A project can pass a Jev-backed `classifier` callable without changing the public `route_task` call. The current repository includes that callable boundary **but no Jev HTTP adapter or live Jev verification**. The tests use fixed signals and a simulated classifier failure, so they run without a TypeSafe API key. A live integration would need the key, a checked request/response mapping, and calibration against your own tasks. If that classifier fails, the local fallback continues to route.
 
 When Poteto Mode is active in Codex, its harness instructions read `~/.agents/pstack-models.md` when present. That file assigns models to Poteto agent roles and overrides its defaults. `install.ps1` copies this repository's `pstack-models.md` to `$env:USERPROFILE\.agents\pstack-models.md`, even when `CODEX_HOME` points elsewhere.
 
