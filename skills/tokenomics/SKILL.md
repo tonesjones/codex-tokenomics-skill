@@ -79,6 +79,17 @@ If `tiktoken` knows the current model, the router uses its encoding for input co
 
 After execution, record provider-reported `actual_input_tokens`, `actual_output_tokens`, and `actual_cost_usd` when available. Optional `retry`, `escalated_from`, `baseline_cost_usd`, and `should_have_tier` fields make the small summary more useful. JSONL is intentionally local and human-readable.
 
+## Tuning handoff estimates
+
+The defaults `handoff_context_tokens=10000`, `handoff_read_tokens=500`, and `parent_handoff_tokens=1500` are starting guesses, not measurements. Tune them from real delegations:
+
+1. For each delegated task, call `record_result` with provider- or runtime-reported usage, adding `child_input_tokens` (everything the child read, including system prompt, tools, and file reads) and `parent_handoff_tokens` (parent tokens spent writing the handoff and reviewing the result, estimated from the parent's usage before and after the delegation if not reported directly). Use recorded session metadata, not the child's own description.
+2. After 10–20 delegations, compute per row `child_input_tokens - estimated task input tokens`. Its median is the new `handoff_context_tokens + handoff_read_tokens`; the median of `parent_handoff_tokens` is the new `parent_handoff_tokens`. Prefer medians so one huge task does not skew them.
+3. Check stay decisions too: occasionally run a borderline stay task through a child and log both sides, so the router is not only calibrated on tasks it already chose to delegate.
+4. Update the values in config (not code), and rerun `summarize_usage`. If `cost_mean_absolute_relative_error` stays above roughly 0.5, the output buckets are probably off as well; adjust `expected_output_tokens` from actual output tokens the same way.
+
+Do this periodically or when the runtime changes (a new model, system prompt, or tool set changes child startup cost).
+
 ## Portability steps
 
 1. Copy `tokenomics_router.py` into the calling project.
