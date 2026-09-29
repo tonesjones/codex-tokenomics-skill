@@ -8,5 +8,8 @@
 !skills/
 !skills/tokenomics/
 !skills/tokenomics/SKILL.md
+!skills/tokenomics/tokenomics_router.py
 !skills/tokenomics/agents/
 !skills/tokenomics/agents/openai.yaml
+!tests/
+!tests/test_tokenomics_router.py
