@@ -30,9 +30,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "force_strong_task_types": [],
     "high_value_task_types": [],
     "force_model": None,
-    # Extra child input for rebuilding context and reading files. Tune from logs.
-    "handoff_context_tokens": 1000,
+    # Extra child input for its system prompt/tools, rebuilt context, and file reads.
+    "handoff_context_tokens": 10000,
     "handoff_read_tokens": 500,
+    # Parent input for writing the handoff and reviewing the child's result,
+    # charged at the current model's rate. Tune both from logs.
+    "parent_handoff_tokens": 1500,
     "log_path": None,
 }
 
@@ -159,7 +162,7 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
                 reasons.append("low classifier confidence: escalated one tier")
         candidate_model = tiers[candidate_tier]["model"]
 
-    routing_keys = {"current_model", "force_model", "force_strong", "force_cheap", "handoff_context_tokens", "handoff_read_tokens", "input_tokens"}
+    routing_keys = {"current_model", "force_model", "force_strong", "force_cheap", "handoff_context_tokens", "handoff_read_tokens", "parent_handoff_tokens", "input_tokens"}
     input_text = task + "\n" + json.dumps({k: v for k, v in context.items() if k not in routing_keys}, sort_keys=True, default=str)
     counted_tokens, token_method = estimate_tokens(input_text, current_model)
     input_tokens = int(context["input_tokens"]) if context.get("input_tokens") is not None else counted_tokens
@@ -168,12 +171,21 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
     output_tokens = int(cfg["expected_output_tokens"].get(signals["expected_output_bucket"], cfg["expected_output_tokens"]["normal"]))
     handoff_tokens = max(0, int(context.get("handoff_context_tokens", cfg["handoff_context_tokens"]))) + max(0, int(context.get("handoff_read_tokens", cfg["handoff_read_tokens"])))
 
+    current_spec = tiers.get(current_tier) if current_tier else None
+    # The parent reads the child's output back as input, plus its own handoff/review work.
+    parent_tokens = max(0, int(context.get("parent_handoff_tokens", cfg["parent_handoff_tokens"]))) + output_tokens
+    parent_cost = _cost(current_spec, parent_tokens, 0)
+
     def estimate(model: str, spec: Mapping[str, Any] | None, extra_tokens: int) -> dict[str, Any]:
+        cost = _cost(spec, input_tokens + extra_tokens, output_tokens)
+        parent = parent_cost if extra_tokens else None
+        if extra_tokens and cost is not None:
+            cost = None if parent is None else round(cost + parent, 8)
         return {"model": model, "estimated_input_tokens": input_tokens + extra_tokens,
                 "estimated_output_tokens": output_tokens, "handoff_input_tokens": extra_tokens,
-                "estimated_cost_usd": _cost(spec, input_tokens + extra_tokens, output_tokens)}
+                "parent_overhead_usd": parent, "estimated_cost_usd": cost}
 
-    estimates = {"stay": estimate(current_model, tiers.get(current_tier) if current_tier else None, 0)}
+    estimates = {"stay": estimate(current_model, current_spec, 0)}
     estimates.update({name: estimate(spec["model"], spec, handoff_tokens) for name, spec in tiers.items()})
     candidate_estimate = estimates[candidate_tier] if candidate_tier else estimate(candidate_model, None, handoff_tokens)
     if candidate_tier is None:

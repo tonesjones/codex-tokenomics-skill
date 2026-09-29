@@ -38,15 +38,23 @@ class TokenomicsRouterTests(unittest.TestCase):
         decision = route_task("Add a unit test", config=PRICED)
         self.assertEqual(decision["action"], "stay")
         self.assertEqual(decision["model"], "standard")
-        self.assertEqual(decision["estimates"]["cheap"]["handoff_input_tokens"], 1500)
+        self.assertEqual(decision["estimates"]["cheap"]["handoff_input_tokens"], 10500)
         self.assertGreater(decision["estimates"]["cheap"]["estimated_cost_usd"],
                            decision["estimates"]["stay"]["estimated_cost_usd"])
+
+    def test_tiny_task_stays_even_when_cheap_tier_is_much_cheaper(self):
+        prices = {"tiers": {"cheap": {"input_per_million": .5, "output_per_million": 2},
+                            "standard": {"input_per_million": 2, "output_per_million": 8},
+                            "strong": {"input_per_million": 10, "output_per_million": 30}}}
+        decision = route_task("Fix typo in README", context={"current_model": "gpt-6-sol"}, config=prices)
+        self.assertEqual((decision["candidate_tier"], decision["action"]), ("cheap", "stay"))
+        self.assertIsNotNone(decision["estimates"]["cheap"]["parent_overhead_usd"])
 
     def test_large_cheap_work_delegates_when_savings_survive_handoff(self):
         decision = route_task("Add a unit test", context={"input_tokens": 10000}, config=PRICED)
         self.assertEqual((decision["action"], decision["model"]), ("delegate", "cheap"))
-        self.assertEqual(decision["estimated_input_tokens"], 11500)
-        self.assertEqual(decision["estimated_cost_usd"], .0117)
+        self.assertEqual(decision["estimated_input_tokens"], 20500)
+        self.assertEqual(decision["estimated_cost_usd"], .0255)
         self.assertEqual(decision["estimates"]["stay"]["estimated_cost_usd"], .0304)
 
     def test_standard_policy_and_explicit_strong(self):
@@ -75,8 +83,8 @@ class TokenomicsRouterTests(unittest.TestCase):
         context = {"input_tokens": 1000, "handoff_context_tokens": 600, "handoff_read_tokens": 400}
         decision = route_task("Add a unit test", context=context, config=PRICED)
         self.assertEqual(decision["estimates"]["stay"]["estimated_cost_usd"], .0034)
-        self.assertEqual(decision["estimates"]["cheap"]["estimated_cost_usd"], .0022)
-        self.assertEqual(decision["estimates"]["strong"]["estimated_cost_usd"], .0106)
+        self.assertEqual(decision["estimates"]["cheap"]["estimated_cost_usd"], .007)
+        self.assertEqual(decision["estimates"]["strong"]["estimated_cost_usd"], .0154)
         unpriced = route_task("Add a unit test")
         self.assertEqual(unpriced["action"], "stay")
         self.assertTrue(all(option["estimated_cost_usd"] is None for option in unpriced["estimates"].values()))
