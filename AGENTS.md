@@ -32,6 +32,8 @@ For work that needs more than an immediate answer, pause after brief intake and 
 
 Before delegating, decide whether expected savings in tokens, credits, or elapsed time exceed the context and coordination overhead. Complete small tasks directly. Do not create subagents merely because they are available, split work into tiny tasks, or delegate work that is tightly coupled to the parent’s evolving reasoning.
 
+For substantial, independent, bounded work where a child model may help, use `$tokenomics` and its router at this checkpoint. Pass the active model and whether the work is substantial and independent; treat unknown dollar prices as unknown, then follow the resulting stay/delegate recommendation when the runtime supports it. Skip this step for small or tightly coupled work.
+
 For independent, bounded work where delegation pays off, prefer this escalation path:
 
 1. Luna (`gpt-6-luna`) for codebase exploration, file reading and information collection, summaries, mechanical edits, formatting, command execution, well-scoped refactors, straightforward implementations, tests, and other clear low-ambiguity tasks. Try Luna first for bounded work when the cost of a possible escalation is acceptable.

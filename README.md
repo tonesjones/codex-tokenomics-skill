@@ -44,6 +44,8 @@ Use `$tokenomics` when you specifically want a fresh routing assessment, such as
 
 For a calling project that needs a programmatic decision, copy `skills/tokenomics/tokenomics_router.py` and call `route_task(task, context=None, config=None)`. It compares staying in the current model with child tiers, including configurable context rebuild and file-read tokens, and returns `action: stay` or `delegate` plus cost estimates for every option. Unknown prices remain `None`. The caller executes the decision; `record_result` can write local JSONL usage, and `summarize_usage` gives a compact feedback loop. See the skill's `SKILL.md` for a minimal example and optional Jev classifier boundary.
 
+In Codex, the global guidance calls `$tokenomics` at the planning checkpoint for substantial, independent, bounded work. The skill runs the router with the active model and a short task summary. When prices are unavailable, it may recommend a cheap child for such work based on capability and scope, clearly marking dollar savings as unverified. Brief or tightly coupled work stays in the current model. The router prints a recommendation; Codex or the calling project still performs and verifies any model handoff.
+
 ### When to add Jev
 
 Start with the local classifier and log the actual results. Jev becomes useful when ambiguous task descriptions repeatedly cause the local rules to choose a tier that is too weak or unnecessarily strong, and there are enough routed tasks for a classification call to repay its cost and latency. Review a few dozen representative logged tasks (20–50 is a starting sample, not a proven threshold), compare Jev's classification against the local rule on those same tasks, and enable it only if the decisions improve.

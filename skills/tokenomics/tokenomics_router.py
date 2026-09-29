@@ -5,10 +5,12 @@ The router selects a configured model but deliberately does not execute it.
 
 from __future__ import annotations
 
+import argparse
 import copy
 import json
 import math
 import re
+import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -162,7 +164,7 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
                 reasons.append("low classifier confidence: escalated one tier")
         candidate_model = tiers[candidate_tier]["model"]
 
-    routing_keys = {"current_model", "force_model", "force_strong", "force_cheap", "handoff_context_tokens", "handoff_read_tokens", "parent_handoff_tokens", "input_tokens"}
+    routing_keys = {"current_model", "force_model", "force_strong", "force_cheap", "handoff_context_tokens", "handoff_read_tokens", "parent_handoff_tokens", "input_tokens", "work_scope", "independent"}
     input_text = task + "\n" + json.dumps({k: v for k, v in context.items() if k not in routing_keys}, sort_keys=True, default=str)
     counted_tokens, token_method = estimate_tokens(input_text, current_model)
     input_tokens = int(context["input_tokens"]) if context.get("input_tokens") is not None else counted_tokens
@@ -201,8 +203,15 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
         action = "delegate"
         reasons.append("explicit override" if explicit else "current model below required tier")
     elif stay_cost is None or child_cost is None:
-        action = "stay"
-        reasons.append("pricing unavailable; cannot establish delegation savings")
+        # A caller can make a qualitative delegation decision without claiming
+        # dollar savings. Both signals are required so short or coupled work stays.
+        cheaper_tier = current_tier in ("standard", "strong") and candidate_tier == "cheap"
+        if cheaper_tier and context.get("work_scope") == "substantial" and context.get("independent") is True:
+            action = "delegate"
+            reasons.append("substantial independent cheap-tier work; dollar savings unverified")
+        else:
+            action = "stay"
+            reasons.append("pricing unavailable; delegation value not established")
     elif child_cost < stay_cost:
         action = "delegate"
         reasons.append("child cost including handoff is lower")
@@ -277,3 +286,23 @@ def summarize_usage(log_path: str | Path) -> dict[str, Any]:
         "estimated_savings_usd": round(sum(float(r.get("baseline_cost_usd", 0)) - float(r.get("actual_cost_usd", 0)) for r in rows if r.get("baseline_cost_usd") is not None and r.get("actual_cost_usd") is not None), 8),
         "models": dict(Counter(r.get("model") for r in rows)),
     }
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Recommend a model route without executing it")
+    parser.add_argument("task", nargs="?", help="Task summary; reads stdin when omitted")
+    parser.add_argument("--current-model", required=True)
+    parser.add_argument("--work-scope", choices=("small", "substantial"), default="small")
+    parser.add_argument("--independent", action="store_true")
+    parser.add_argument("--input-tokens", type=int)
+    parser.add_argument("--config", type=Path, help="Optional JSON configuration with models and prices")
+    args = parser.parse_args()
+    task = args.task if args.task is not None else sys.stdin.read().strip()
+    if not task:
+        parser.error("provide a task or pipe one on stdin")
+    config = json.loads(args.config.read_text(encoding="utf-8")) if args.config else None
+    context = {"current_model": args.current_model, "work_scope": args.work_scope,
+               "independent": args.independent}
+    if args.input_tokens is not None:
+        context["input_tokens"] = args.input_tokens
+    print(json.dumps(route_task(task, context=context, config=config), indent=2))

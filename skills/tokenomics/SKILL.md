@@ -13,6 +13,8 @@ Apply the global model-routing policy in `~/.codex/AGENTS.md` when working in Co
 
 At the first planning checkpoint, compare likely savings with switching and child handoff overhead. Do small or tightly coupled tasks directly in the current model. A child must rebuild context and may reread files, so count those input tokens before recommending delegation.
 
+For substantial, independent, bounded work in Codex, run the router before handing it off. Supply the active model. Mark the work substantial only when it is more than a short edit or answer, and independent only when a child can finish with a compact handoff. Treat `stay` or `delegate` as a recommendation; verify the child's actual model from runtime metadata. Skip the router for trivial or tightly coupled work.
+
 The router keeps the existing smallest-capable policy but makes its model IDs and prices project configuration instead of policy literals:
 
 - `cheap`: clear, bounded work such as searching, summaries, formatting, mechanical edits, tests, and narrow refactors.
@@ -28,6 +30,14 @@ At the first meaningful planning checkpoint, recommend a manual top-level switch
 ## Portable API
 
 Copy `tokenomics_router.py` into a project (or import it from this installed skill). It has no required package dependencies.
+
+For a quick Codex check, run the installed script with the real task summary:
+
+```powershell
+python "$env:USERPROFILE\.codex\skills\tokenomics\tokenomics_router.py" --current-model gpt-6-sol --work-scope substantial --independent "Summarize the test failures and identify the failing files"
+```
+
+Omit `--independent` or use `--work-scope small` when a child would need substantial coordination or the work is brief. Pass `--input-tokens` when the remaining prompt size is known; pass `--config` with a JSON file only when you have current model prices or different model IDs. The command prints a decision and never starts a model.
 
 ```python
 from tokenomics_router import route_task, record_result
@@ -63,7 +73,9 @@ A classifier returns only `task_type`, `complexity` (0..1), `expected_output_buc
 
 If the classifier is absent, Tokenomics uses whole-word rules as a conservative deterministic fallback. If it fails, routing still works. Unknown task types use standard. Low confidence on a known cheap task rises one tier to standard; normal uncertainty does not automatically invoke Astra. `context={"force_model": "..."}`, `force_strong`, and `force_cheap` override ordinary selection. `force_model`, task lists, thresholds, output buckets, tiers, prices, and log path are configurable.
 
-Pass the observed active model as `context["current_model"]`; otherwise the router assumes the configured standard model. Pass `context["input_tokens"]` if the caller knows the real prompt size. Handoff adds configurable `handoff_context_tokens` (default 10000, covering the child's system prompt, tools, and rebuilt context) and `handoff_read_tokens` (default 500) to every child estimate. Each child estimate also includes `parent_overhead_usd`: `parent_handoff_tokens` (default 1500) plus the child's output read back, charged at the current model's input rate, because the parent writes the handoff and reviews the result. Override these in config or context based on actual project logs. Delegate to a cheaper tier only when its estimated dollar cost including handoff is lower. If either price is unknown, stay unless the caller explicitly forces a model/tier or the current model is below the required tier. No price is invented.
+Without prices, substantial independent cheap-tier work may recommend Luna from Sol. This is a qualitative capability decision, not a measured dollar saving; the result says so and leaves dollar cost as `None`. Other unpriced tasks stay unless the active model is below the required tier or a route is explicitly forced. With prices, the router compares estimated costs as before. `work_scope` and `independent` are caller judgments, not Jev output.
+
+Pass the observed active model as `context["current_model"]`; otherwise the Python API assumes the configured standard model. Pass `context["input_tokens"]` if the caller knows the real prompt size. Handoff adds configurable `handoff_context_tokens` (default 10000, covering the child's system prompt, tools, and rebuilt context) and `handoff_read_tokens` (default 500) to every child estimate. Each child estimate also includes `parent_overhead_usd`: `parent_handoff_tokens` (default 1500) plus the child's output read back, charged at the current model's input rate, because the parent writes the handoff and reviews the result. Override these in config or context based on actual project logs. With prices, delegate to a cheaper tier only when its estimated dollar cost including handoff is lower. Without prices, use the limited qualitative rule above. No price is invented.
 
 An unknown forced model or missing price produces `estimated_cost_usd: None` and says so in `reason`; Tokenomics never fabricates a dollar amount.
 
