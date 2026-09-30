@@ -4,16 +4,16 @@ feature, refactoring: gpt-6-luna
 bug-fix: gpt-6-luna
 perf-issue: gpt-6-luna
 hillclimb: gpt-6-luna
-judgment and prose: gpt-6-sol
-hardest tasks: gpt-6-sol
+judgment and prose: gpt-6.1-sol
+hardest tasks: gpt-6.1-sol
 how explorer: gpt-6-luna
-how explainer: gpt-6-sol
+how explainer: gpt-6.1-sol
 why investigators: gpt-6-luna
-why synthesizer: gpt-6-sol
+why synthesizer: gpt-6.1-sol
 reflect tooling: gpt-6-luna
-reflect judgment, divergent, synthesizer: gpt-6-sol
-arena runners: gpt-6-luna, gpt-6-sol
-arena cross-judge pool: gpt-6-luna, gpt-6-sol
+reflect judgment, divergent, synthesizer: gpt-6.1-sol
+arena runners: gpt-6-luna, gpt-6.1-sol
+arena cross-judge pool: gpt-6-luna, gpt-6.1-sol
 swarm workers: gpt-6-luna
-architect runners: gpt-6-luna, gpt-6-sol
-interrogate reviewers: gpt-6-luna, gpt-6-sol
+architect runners: gpt-6-luna, gpt-6.1-sol
+interrogate reviewers: gpt-6-luna, gpt-6.1-sol

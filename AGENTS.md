@@ -37,7 +37,7 @@ For substantial, independent, bounded work where a child model may help, use `$t
 For independent, bounded work where delegation pays off, prefer this escalation path:
 
 1. Luna (`gpt-6-luna`) for codebase exploration, file reading and information collection, summaries, mechanical edits, formatting, command execution, well-scoped refactors, straightforward implementations, tests, and other clear low-ambiguity tasks. Try Luna first for bounded work when the cost of a possible escalation is acceptable.
-2. Sol (`gpt-6-sol`) for moderately ambiguous or judgment-bearing work, decomposition, architecture, difficult debugging, security-sensitive reasoning, integration, consequential review, and final judgment.
+2. Sol (`gpt-6.1-sol`) for moderately ambiguous or judgment-bearing work, decomposition, architecture, difficult debugging, security-sensitive reasoning, integration, consequential review, and final judgment.
 3. Astra (`gpt-6-astra`) only for unusually hard end-to-end work, long-horizon or cross-domain tasks, very large context, or cases where Sol is struggling and avoiding further Sol passes justifies Astra's higher cost. Astra is an exception tier, not the default replacement for Sol.
 
 When Poteto Mode is active, use its per-role model settings as defaults. Apply the same task-level delegation threshold and complexity judgment before selecting a child model. A Poteto workflow does not by itself justify a subagent or a cheaper model.

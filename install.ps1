@@ -54,7 +54,7 @@ New-Item -ItemType Directory -Path $pstackRoot -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $repoRoot 'pstack-models.md') -Destination $pstackTarget -Force
 
 $configText = if (Test-Path -LiteralPath $configTarget) { Get-Content -Raw -LiteralPath $configTarget } else { '' }
-$configText = Set-TopLevelTomlValue $configText 'model' '"gpt-6-sol"'
+$configText = Set-TopLevelTomlValue $configText 'model' '"gpt-6.1-sol"'
 $configText = Set-TopLevelTomlValue $configText 'model_reasoning_effort' '"low"'
 $configText = Set-TopLevelTomlValue $configText 'personality' '"pragmatic"'
 $configText = Set-TopLevelTomlValue $configText 'service_tier' '"default"'
