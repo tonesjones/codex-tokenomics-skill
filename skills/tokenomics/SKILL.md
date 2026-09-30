@@ -17,7 +17,7 @@ For substantial, independent, bounded work in Codex, run the router before handi
 
 The router keeps the existing smallest-capable policy but makes its model IDs and prices project configuration instead of policy literals:
 
-- `cheap`: clear, bounded work such as searching, summaries, formatting, mechanical edits, tests, and narrow refactors.
+- `cheap`: clear, bounded work such as source collection, searching, summaries, formatting, mechanical edits, tests, and narrow refactors. Keep interpretation and consequential decisions with Sol.
 - `standard`: architecture, security-sensitive work, hard debugging, integration, planning, and the fallback for unknown task types.
 - `strong`: an exception for explicitly forced strong work or project-configured high-value/strong task types; use it only for the hardest work when Sol is genuinely insufficient.
 

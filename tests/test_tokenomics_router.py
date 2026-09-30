@@ -69,6 +69,17 @@ class TokenomicsRouterTests(unittest.TestCase):
         decision = json.loads(result.stdout)
         self.assertEqual((decision["action"], decision["model"]), ("delegate", "gpt-6-luna"))
 
+    def test_source_collection_routes_cheap_but_interpretation_stays_standard(self):
+        task = ("Collect current authoritative ADP and injury sources for fantasy basketball "
+                "players, map source names to existing player IDs, and report unresolved gaps")
+        context = {"current_model": "gpt-6-sol", "work_scope": "substantial", "independent": True}
+        collection = route_task(task, context=context)
+        self.assertEqual((collection["task_type"], collection["action"], collection["model"]),
+                         ("source_collection", "delegate", "gpt-6-luna"))
+        judgment = route_task("Collect sources and decide which injury flags to change", context=context)
+        self.assertEqual((judgment["task_type"], judgment["action"], judgment["model"]),
+                         ("unknown", "stay", "gpt-6-sol"))
+
     def test_large_cheap_work_delegates_when_savings_survive_handoff(self):
         decision = route_task("Add a unit test", context={"input_tokens": 10000}, config=PRICED)
         self.assertEqual((decision["action"], decision["model"]), ("delegate", "cheap"))

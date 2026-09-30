@@ -27,7 +27,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "expected_output_tokens": {"short": 300, "normal": 900, "long": 2400},
     "low_confidence_threshold": 0.70,
-    "cheap_task_types": ["format", "search", "summary", "mechanical_edit", "test"],
+    "cheap_task_types": ["format", "search", "summary", "source_collection", "mechanical_edit", "test"],
     "standard_task_types": ["architecture", "security", "hard_debugging", "integration", "planning", "design"],
     "force_strong_task_types": [],
     "high_value_task_types": [],
@@ -74,6 +74,10 @@ def default_classifier(task: str, context: Mapping[str, Any] | None = None) -> d
         return {"task_type": "planning", "complexity": 0.65, "expected_output_bucket": "long", "confidence": 0.80}
     if has("unit", "test") or has("tests") or has("test"):
         return {"task_type": "test", "complexity": 0.25, "expected_output_bucket": "short", "confidence": 0.80}
+    if (any(word in words for word in ("source", "sources"))
+            and any(word in words for word in ("collect", "gather", "find", "extract", "map"))
+            and not any(word in words for word in ("analyze", "assess", "decide", "interpret", "recommend", "validate"))):
+        return {"task_type": "source_collection", "complexity": 0.30, "expected_output_bucket": "normal", "confidence": 0.80}
     if any(has(word) for word in ("format", "rename", "typo", "summarize")) or has("find", "files") or has("list", "files"):
         return {"task_type": "mechanical_edit", "complexity": 0.20, "expected_output_bucket": "short", "confidence": 0.80}
     return {"task_type": "unknown", "complexity": 0.50, "expected_output_bucket": "normal", "confidence": 0.0}
