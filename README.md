@@ -3,7 +3,7 @@
 This repository contains the small, reusable portion of my personal Codex setup:
 
 - `AGENTS.md`: global engineering and model-routing guidance.
-- `skills/tokenomics/`: implicit routing guidance plus a dependency-free portable router/cost estimator. Its default tier mapping is GPT-6 Luna → GPT-6 Sol → GPT-6 Astra, but projects can supply their own model IDs and current prices.
+- `skills/tokenomics/`: a delegation, review, and escalation workflow plus an optional dependency-free router/cost estimator. Its default tier mapping is GPT-6 Luna → GPT-6 Sol → GPT-6 Astra, but projects can supply their own model IDs and current prices.
 - `pstack-models.md`: Poteto Mode's per-role model configuration, installed to `$env:USERPROFILE\.agents\pstack-models.md`.
 - `install.ps1`: installs those files and applies four portable Codex preferences.
 
@@ -20,7 +20,7 @@ The installer targets `$env:CODEX_HOME` when set, otherwise `$env:USERPROFILE\.c
 It also sets these portable top-level preferences in the existing `config.toml` without replacing machine-specific sections:
 
 ```toml
-model = "gpt-6-sol"
+model = "gpt-6.1-sol"
 model_reasoning_effort = "low"
 personality = "pragmatic"
 service_tier = "default"
@@ -69,3 +69,5 @@ The allowlist-style `.gitignore` prevents accidental tracking of everything exce
 - The custom `bd` skill and proprietary local documentation dependencies.
 
 Do not weaken the `.gitignore` allowlist without reviewing every newly included file for credentials and machine-specific data.
+
+The skill accepts an agent-assessed task type through `--task-type` and uses GPT-6.1 Sol by default and recognizes legacy GPT-6 Sol capability without borrowing model prices. Update only the skill folder to preserve unrelated global settings. Keep backups outside discoverable skills directories.

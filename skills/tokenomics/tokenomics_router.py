@@ -22,9 +22,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # from the provider bill; None means "do not claim a dollar estimate".
     "tiers": {
         "cheap": {"model": "gpt-6-luna", "max_complexity": 0.34, "input_per_million": None, "output_per_million": None},
-        "standard": {"model": "gpt-6-sol", "max_complexity": 0.74, "input_per_million": None, "output_per_million": None},
+        "standard": {"model": "gpt-6.1-sol", "max_complexity": 0.74, "input_per_million": None, "output_per_million": None},
         "strong": {"model": "gpt-6-astra", "max_complexity": 1.0, "input_per_million": None, "output_per_million": None},
     },
+    "model_aliases": {"gpt-6-sol": "standard"},
     "expected_output_tokens": {"short": 300, "normal": 900, "long": 2400},
     "low_confidence_threshold": 0.70,
     "cheap_task_types": ["format", "search", "summary", "source_collection", "mechanical_edit", "test"],
@@ -72,10 +73,12 @@ def default_classifier(task: str, context: Mapping[str, Any] | None = None) -> d
         return {"task_type": "design", "complexity": 0.65, "expected_output_bucket": "normal", "confidence": 0.80}
     if has("plan") or has("planning"):
         return {"task_type": "planning", "complexity": 0.65, "expected_output_bucket": "long", "confidence": 0.80}
+    if any(word in words for word in ("analyze", "assess", "decide", "interpret", "recommend", "validate", "authentication", "authorization")):
+        return {"task_type": "integration", "complexity": 0.70, "expected_output_bucket": "normal", "confidence": 0.80}
     if has("unit", "test") or has("tests") or has("test"):
         return {"task_type": "test", "complexity": 0.25, "expected_output_bucket": "short", "confidence": 0.80}
     if (any(word in words for word in ("source", "sources"))
-            and any(word in words for word in ("collect", "gather", "find", "extract", "map"))
+            and any(word in words for word in ("collect", "gather", "find", "extract", "map", "research"))
             and not any(word in words for word in ("analyze", "assess", "decide", "interpret", "recommend", "validate"))):
         return {"task_type": "source_collection", "complexity": 0.30, "expected_output_bucket": "normal", "confidence": 0.80}
     if any(has(word) for word in ("format", "rename", "typo", "summarize")) or has("find", "files") or has("list", "files"):
@@ -131,11 +134,16 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
     cfg = _merge(DEFAULT_CONFIG, config)
     context = dict(context or {})
     tiers = cfg["tiers"]
+    assessment = context.get("assessment")
+    if assessment is not None:
+        cfg["classifier"] = lambda task, context: assessment
     signals, classifier_error = _signals(task, context, cfg)
     task_type = signals["task_type"]
     reasons: list[str] = []
     current_model = str(context.get("current_model") or cfg.get("current_model") or tiers["standard"]["model"])
-    current_tier = _tier_for_model(current_model, tiers)
+    current_tier = _tier_for_model(current_model, tiers) or cfg.get("model_aliases", {}).get(current_model)
+    if current_tier not in tiers:
+        current_tier = None
 
     forced_model = context.get("force_model") or cfg.get("force_model")
     if forced_model:
@@ -168,7 +176,7 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
                 reasons.append("low classifier confidence: escalated one tier")
         candidate_model = tiers[candidate_tier]["model"]
 
-    routing_keys = {"current_model", "force_model", "force_strong", "force_cheap", "handoff_context_tokens", "handoff_read_tokens", "parent_handoff_tokens", "input_tokens", "work_scope", "independent"}
+    routing_keys = {"current_model", "force_model", "force_strong", "force_cheap", "handoff_context_tokens", "handoff_read_tokens", "parent_handoff_tokens", "input_tokens", "work_scope", "independent", "assessment"}
     input_text = task + "\n" + json.dumps({k: v for k, v in context.items() if k not in routing_keys}, sort_keys=True, default=str)
     counted_tokens, token_method = estimate_tokens(input_text, current_model)
     input_tokens = int(context["input_tokens"]) if context.get("input_tokens") is not None else counted_tokens
@@ -177,7 +185,8 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
     output_tokens = int(cfg["expected_output_tokens"].get(signals["expected_output_bucket"], cfg["expected_output_tokens"]["normal"]))
     handoff_tokens = max(0, int(context.get("handoff_context_tokens", cfg["handoff_context_tokens"]))) + max(0, int(context.get("handoff_read_tokens", cfg["handoff_read_tokens"])))
 
-    current_spec = tiers.get(current_tier) if current_tier else None
+    # A capability alias does not establish the aliased model's price.
+    current_spec = tiers.get(current_tier) if _tier_for_model(current_model, tiers) else None
     # The parent reads the child's output back as input, plus its own handoff/review work.
     parent_tokens = max(0, int(context.get("parent_handoff_tokens", cfg["parent_handoff_tokens"]))) + output_tokens
     parent_cost = _cost(current_spec, parent_tokens, 0)
@@ -198,7 +207,8 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
         estimates["forced"] = candidate_estimate
     stay_cost = estimates["stay"]["estimated_cost_usd"]
     child_cost = candidate_estimate["estimated_cost_usd"]
-    explicit = bool(forced_model or context.get("force_strong") or context.get("force_cheap"))
+    explicit = bool(forced_model or context.get("force_strong") or context.get("force_cheap")
+                    or task_type in set(cfg["force_strong_task_types"]) | set(cfg["high_value_task_types"]))
 
     if candidate_model == current_model:
         action = "stay"
@@ -216,6 +226,9 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
         else:
             action = "stay"
             reasons.append("pricing unavailable; delegation value not established")
+    elif not (context.get("work_scope") == "substantial" and context.get("independent") is True):
+        action = "stay"
+        reasons.append("small or coupled work: keep execution local")
     elif child_cost < stay_cost:
         action = "delegate"
         reasons.append("child cost including handoff is lower")
@@ -299,6 +312,7 @@ if __name__ == "__main__":
     parser.add_argument("--work-scope", choices=("small", "substantial"), default="small")
     parser.add_argument("--independent", action="store_true")
     parser.add_argument("--input-tokens", type=int)
+    parser.add_argument("--task-type", help="Agent-assessed task type; overrides keyword fallback")
     parser.add_argument("--config", type=Path, help="Optional JSON configuration with models and prices")
     args = parser.parse_args()
     task = args.task if args.task is not None else sys.stdin.read().strip()
@@ -307,6 +321,8 @@ if __name__ == "__main__":
     config = json.loads(args.config.read_text(encoding="utf-8")) if args.config else None
     context = {"current_model": args.current_model, "work_scope": args.work_scope,
                "independent": args.independent}
+    if args.task_type:
+        context["assessment"] = {"task_type": args.task_type, "complexity": 0.5, "confidence": 1.0, "expected_output_bucket": "normal"}
     if args.input_tokens is not None:
         context["input_tokens"] = args.input_tokens
     print(json.dumps(route_task(task, context=context, config=config), indent=2))

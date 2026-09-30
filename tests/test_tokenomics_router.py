@@ -47,7 +47,7 @@ class TokenomicsRouterTests(unittest.TestCase):
         prices = {"tiers": {"cheap": {"input_per_million": .5, "output_per_million": 2},
                             "standard": {"input_per_million": 2, "output_per_million": 8},
                             "strong": {"input_per_million": 10, "output_per_million": 30}}}
-        decision = route_task("Fix typo in README", context={"current_model": "gpt-6-sol"}, config=prices)
+        decision = route_task("Fix typo in README", context={"current_model": "gpt-6.1-sol"}, config=prices)
         self.assertEqual((decision["candidate_tier"], decision["action"]), ("cheap", "stay"))
         self.assertIsNotNone(decision["estimates"]["cheap"]["parent_overhead_usd"])
 
@@ -63,7 +63,7 @@ class TokenomicsRouterTests(unittest.TestCase):
 
     def test_command_line_route(self):
         script = Path(__file__).parents[1] / "skills" / "tokenomics" / "tokenomics_router.py"
-        result = subprocess.run([sys.executable, str(script), "--current-model", "gpt-6-sol",
+        result = subprocess.run([sys.executable, str(script), "--current-model", "gpt-6.1-sol",
                                  "--work-scope", "substantial", "--independent", "Summarize test failures"],
                                 capture_output=True, text=True, check=True)
         decision = json.loads(result.stdout)
@@ -72,16 +72,16 @@ class TokenomicsRouterTests(unittest.TestCase):
     def test_source_collection_routes_cheap_but_interpretation_stays_standard(self):
         task = ("Collect current authoritative ADP and injury sources for fantasy basketball "
                 "players, map source names to existing player IDs, and report unresolved gaps")
-        context = {"current_model": "gpt-6-sol", "work_scope": "substantial", "independent": True}
+        context = {"current_model": "gpt-6.1-sol", "work_scope": "substantial", "independent": True}
         collection = route_task(task, context=context)
         self.assertEqual((collection["task_type"], collection["action"], collection["model"]),
                          ("source_collection", "delegate", "gpt-6-luna"))
         judgment = route_task("Collect sources and decide which injury flags to change", context=context)
         self.assertEqual((judgment["task_type"], judgment["action"], judgment["model"]),
-                         ("unknown", "stay", "gpt-6-sol"))
+                         ("integration", "stay", "gpt-6.1-sol"))
 
     def test_large_cheap_work_delegates_when_savings_survive_handoff(self):
-        decision = route_task("Add a unit test", context={"input_tokens": 10000}, config=PRICED)
+        decision = route_task("Add a unit test", context={"input_tokens": 10000, "work_scope": "substantial", "independent": True}, config=PRICED)
         self.assertEqual((decision["action"], decision["model"]), ("delegate", "cheap"))
         self.assertEqual(decision["estimated_input_tokens"], 20500)
         self.assertEqual(decision["estimated_cost_usd"], .0255)
@@ -107,7 +107,7 @@ class TokenomicsRouterTests(unittest.TestCase):
         self.assertEqual((fallback["action"], fallback["candidate_tier"]), ("stay", "standard"))
         self.assertFalse(fallback["classifier_available"])
         from_cheap = route_task("ordinary task", context={"current_model": "gpt-6-luna"})
-        self.assertEqual((from_cheap["action"], from_cheap["model"]), ("delegate", "gpt-6-sol"))
+        self.assertEqual((from_cheap["action"], from_cheap["model"]), ("delegate", "gpt-6.1-sol"))
 
     def test_cost_options_unknown_pricing_and_force_model(self):
         context = {"input_tokens": 1000, "handoff_context_tokens": 600, "handoff_read_tokens": 400}
@@ -129,10 +129,33 @@ class TokenomicsRouterTests(unittest.TestCase):
         with patch.dict(sys.modules, {"tiktoken": fake}):
             self.assertEqual(estimate_tokens("abcdefgh", "unlisted"), (2, "chars/4 approximation"))
 
+    def test_configured_strong_override_and_alias_prices(self):
+        for key in ("force_strong_task_types", "high_value_task_types"):
+            result = route_task("work", config={key: ["unknown"]})
+            self.assertEqual((result["action"], result["model"]), ("delegate", "gpt-6-astra"))
+        result = route_task("Collect sources", {"current_model": "gpt-6-sol", "work_scope": "substantial", "independent": True},
+                            {"tiers": {"standard": {"input_per_million": 2, "output_per_million": 8}}})
+        self.assertIsNone(result["estimates"]["stay"]["estimated_cost_usd"])
+
+    def test_current_sol_alias_and_judgment(self):
+        context = {"current_model": "gpt-6.1-sol", "work_scope": "substantial", "independent": True}
+        result = route_task("Collect sources", context)
+        self.assertEqual((result["action"], result["model"]), ("delegate", "gpt-6-luna"))
+        for task in ("Summarize sources and recommend which stock to sell", "Add tests and decide whether authentication is safe"):
+            self.assertEqual(route_task(task, context)["action"], "stay")
+
+    def test_agent_assessment_and_priced_scope_gate(self):
+        context = {"current_model": "gpt-6.1-sol", "work_scope": "substantial", "independent": True,
+                   "assessment": {"task_type": "source_collection", "confidence": .9, "complexity": .3}}
+        self.assertEqual(route_task("Research current ADP and injury reports", context)["action"], "delegate")
+        for independent in (False, True):
+            result = route_task("Summarize files", {"input_tokens": 100000, "work_scope": "small", "independent": independent}, PRICED)
+            self.assertEqual(result["action"], "stay")
+
     def test_usage_logging_and_summary(self):
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory) / "usage.jsonl"
-            decision = route_task("Add a unit test", context={"input_tokens": 10000}, config=PRICED)
+            decision = route_task("Add a unit test", context={"input_tokens": 10000, "work_scope": "substantial", "independent": True}, config=PRICED)
             record = record_result(decision, {"actual_input_tokens": 10000, "actual_output_tokens": 100,
                                               "actual_cost_usd": .0102, "retry": False}, True, {"log_path": log})
             self.assertEqual(json.loads(log.read_text())["action"], "delegate")
