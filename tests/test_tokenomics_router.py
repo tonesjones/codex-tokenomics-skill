@@ -68,6 +68,11 @@ class TokenomicsRouterTests(unittest.TestCase):
                                 capture_output=True, text=True, check=True)
         decision = json.loads(result.stdout)
         self.assertEqual((decision["action"], decision["model"]), ("delegate", "gpt-6-luna"))
+        assessed = subprocess.run([sys.executable, str(script), "--current-model", "gpt-6.1-sol",
+                                   "--work-scope", "substantial", "--independent", "--task-type",
+                                   "source_collection", "Collect bounded evidence for Sol"],
+                                  capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(assessed.stdout)["action"], "delegate")
 
     def test_source_collection_routes_cheap_but_interpretation_stays_standard(self):
         task = ("Collect current authoritative ADP and injury sources for fantasy basketball "
@@ -93,7 +98,28 @@ class TokenomicsRouterTests(unittest.TestCase):
                 decision = route_task("work", config={**PRICED, **signals(task_type, .95)})
                 self.assertEqual(decision["candidate_tier"], "standard")
         strong = route_task("architecture work", context={"force_strong": True}, config=PRICED)
-        self.assertEqual((strong["action"], strong["model"]), ("delegate", "strong"))
+        self.assertEqual((strong["action"], strong["model"], strong["candidate_model"]),
+                         ("request_approval", "standard", "strong"))
+        approved = route_task("architecture work", context={"force_strong": True, "approval_granted": True}, config=PRICED)
+        self.assertEqual((approved["action"], approved["model"]), ("delegate", "strong"))
+
+    def test_cheap_category_cannot_override_high_complexity(self):
+        result = route_task("work", config={**PRICED, **signals("test", .99)})
+        self.assertEqual(result["candidate_tier"], "standard")
+
+    def test_strong_configuration_and_forced_model_request_approval(self):
+        for config, context in (({"force_strong_task_types": ["unknown"]}, {}),
+                                ({}, {"force_model": "strong"})):
+            with self.subTest(config=config, context=context):
+                result = route_task("work", context=context, config={**PRICED, **config})
+                self.assertEqual(result["action"], "request_approval")
+                self.assertEqual(result["candidate_model"], "strong")
+
+    def test_approval_flag_does_not_turn_low_confidence_into_strong_route(self):
+        result = route_task("work", context={"approval_granted": True},
+                            config={**PRICED, **signals("design", .5, .2)})
+        self.assertEqual(result["candidate_tier"], "standard")
+        self.assertEqual(result["action"], "stay")
 
     def test_low_confidence_and_classifier_failure(self):
         low = route_task("work", config={**PRICED, **signals("test", .1, .2)})
@@ -124,6 +150,72 @@ class TokenomicsRouterTests(unittest.TestCase):
         self.assertIsNone(forced["estimates"]["forced"]["estimated_cost_usd"])
         self.assertIn("pricing unavailable", forced["reason"])
 
+    def test_zero_child_handoff_still_charges_parent_overhead(self):
+        result = route_task("work", context={"handoff_context_tokens": 0, "handoff_read_tokens": 0}, config=PRICED)
+        self.assertIsNotNone(result["estimates"]["cheap"]["parent_overhead_usd"])
+        self.assertEqual(result["estimates"]["cheap"]["handoff_input_tokens"], 0)
+        self.assertIsNone(result["estimates"]["stay"]["parent_overhead_usd"])
+
+    def test_parent_remaining_input_is_charged_separately(self):
+        result = route_task("work", context={"parent_remaining_input_tokens": 1000}, config=PRICED)
+        expected = (1000 + 1500 + 200) * 3 / 1_000_000
+        self.assertEqual(result["estimates"]["cheap"]["parent_overhead_usd"], round(expected, 8))
+
+    def test_compact_child_input_can_make_delegation_pay(self):
+        prices = {"tiers": {"cheap": {"input_per_million": 5, "output_per_million": 1},
+                            "standard": {"input_per_million": 1, "output_per_million": 2},
+                            "strong": {"input_per_million": 10, "output_per_million": 6}},
+                  "handoff_context_tokens": 0, "handoff_read_tokens": 0, "parent_handoff_tokens": 0}
+        scope = {"input_tokens": 10000, "work_scope": "substantial", "independent": True}
+        without_compaction = route_task("work", scope, {**prices, **signals("test", .2)})
+        compact = route_task("work", {**scope, "child_input_tokens": 1000},
+                             {**prices, **signals("test", .2)})
+        self.assertEqual(without_compaction["action"], "stay")
+        self.assertEqual(compact["action"], "delegate")
+        self.assertEqual(compact["estimates"]["cheap"]["base_input_tokens"], 1000)
+        self.assertEqual(compact["estimates"]["cheap"]["input_token_source"], "provided child_input_tokens")
+
+    def test_cached_input_rate_changes_estimate_and_missing_rate_is_unknown(self):
+        prices = {"tiers": {"cheap": {"input_per_million": 3, "output_per_million": 2,
+                                        "cached_input_per_million": .1},
+                            "standard": {"input_per_million": 2, "output_per_million": 2},
+                            "strong": {"input_per_million": 10, "output_per_million": 6}},
+                  "handoff_context_tokens": 0, "handoff_read_tokens": 0, "parent_handoff_tokens": 0}
+        context = {"input_tokens": 10000, "child_cached_input_tokens": 10000,
+                   "work_scope": "substantial", "independent": True}
+        known = route_task("work", context, {**prices, **signals("test", .2)})
+        self.assertEqual(known["action"], "delegate")
+        self.assertEqual(known["estimates"]["cheap"]["cached_input_tokens"], 10000)
+
+        unknown_price = {**prices, "tiers": {**prices["tiers"],
+                          "cheap": {"input_per_million": 3, "output_per_million": 2}}}
+        unknown = route_task("work", context, {**unknown_price, **signals("test", .2)})
+        self.assertIsNone(unknown["estimates"]["cheap"]["estimated_cost_usd"])
+        self.assertIn("dollar savings unverified", unknown["reason"])
+
+    def test_warm_sol_context_can_make_staying_cheaper(self):
+        prices = {"tiers": {"cheap": {"input_per_million": 1, "output_per_million": 2},
+                            "standard": {"input_per_million": 3, "cached_input_per_million": .1,
+                                         "output_per_million": 4},
+                            "strong": {"input_per_million": 5, "output_per_million": 6}}}
+        context = {"input_tokens": 20000, "work_scope": "substantial", "independent": True}
+        cold = route_task("work", context, {**prices, **signals("test", .2)})
+        warm = route_task("work", {**context, "stay_cached_input_tokens": 18000},
+                          {**prices, **signals("test", .2)})
+        self.assertEqual(cold["action"], "delegate")
+        self.assertEqual(warm["action"], "stay")
+        self.assertEqual(warm["estimates"]["stay"]["cached_input_tokens"], 18000)
+
+    def test_small_savings_do_not_pay_for_handoff_uncertainty(self):
+        prices = {"tiers": {"cheap": {"input_per_million": 1, "output_per_million": 2},
+                            "standard": {"input_per_million": 1.05, "output_per_million": 2.1},
+                            "strong": {"input_per_million": 5, "output_per_million": 6}},
+                  "handoff_context_tokens": 0, "handoff_read_tokens": 0, "parent_handoff_tokens": 0,
+                  "minimum_savings_fraction": .15}
+        result = route_task("work", {"input_tokens": 10000, "work_scope": "substantial", "independent": True},
+                            {**prices, **signals("test", .2)})
+        self.assertEqual(result["action"], "stay")
+
     def test_unknown_tiktoken_model_uses_documented_approximation(self):
         fake = SimpleNamespace(encoding_for_model=lambda model: (_ for _ in ()).throw(KeyError(model)))
         with patch.dict(sys.modules, {"tiktoken": fake}):
@@ -132,7 +224,8 @@ class TokenomicsRouterTests(unittest.TestCase):
     def test_configured_strong_override_and_alias_prices(self):
         for key in ("force_strong_task_types", "high_value_task_types"):
             result = route_task("work", config={key: ["unknown"]})
-            self.assertEqual((result["action"], result["model"]), ("delegate", "gpt-6-astra"))
+            self.assertEqual((result["action"], result["model"], result["candidate_model"]),
+                             ("request_approval", "gpt-6.1-sol", "gpt-6-astra"))
         result = route_task("Collect sources", {"current_model": "gpt-6-sol", "work_scope": "substantial", "independent": True},
                             {"tiers": {"standard": {"input_per_million": 2, "output_per_million": 8}}})
         self.assertIsNone(result["estimates"]["stay"]["estimated_cost_usd"])

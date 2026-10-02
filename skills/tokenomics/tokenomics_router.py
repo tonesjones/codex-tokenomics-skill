@@ -39,6 +39,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # Parent input for writing the handoff and reviewing the child's result,
     # charged at the current model's rate. Tune both from logs.
     "parent_handoff_tokens": 1500,
+    # Additional parent input still needed after handoff; this is separate from
+    # the child's rebuilt context and defaults to none when unknown.
+    "parent_remaining_input_tokens": 0,
+    "minimum_savings_fraction": 0.15,
     "log_path": None,
 }
 
@@ -123,10 +127,18 @@ def _next_tier(tier: str, tiers: Mapping[str, Any]) -> str:
         return tier
 
 
-def _cost(spec: Mapping[str, Any] | None, input_tokens: int, output_tokens: int) -> float | None:
+def _cost(spec: Mapping[str, Any] | None, input_tokens: int, output_tokens: int,
+          cached_input_tokens: int = 0) -> float | None:
     if not spec or spec.get("input_per_million") is None or spec.get("output_per_million") is None:
         return None
-    return round((input_tokens * float(spec["input_per_million"]) + output_tokens * float(spec["output_per_million"])) / 1_000_000, 8)
+    cached_input_tokens = max(0, min(input_tokens, cached_input_tokens))
+    cached_rate = spec.get("cached_input_per_million")
+    if cached_input_tokens and cached_rate is None:
+        return None
+    input_cost = (input_tokens - cached_input_tokens) * float(spec["input_per_million"])
+    if cached_input_tokens:
+        input_cost += cached_input_tokens * float(cached_rate)
+    return round((input_cost + output_tokens * float(spec["output_per_million"])) / 1_000_000, 8)
 
 
 def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -154,7 +166,7 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
         if context.get("force_strong") or task_type in set(cfg["force_strong_task_types"]) | set(cfg["high_value_task_types"]):
             candidate_tier = "strong"
             reasons.append("strong task policy")
-        elif context.get("force_cheap") or task_type in cfg["cheap_task_types"]:
+        elif (context.get("force_cheap") or task_type in cfg["cheap_task_types"]) and signals["complexity"] <= float(tiers["cheap"]["max_complexity"]):
             candidate_tier = "cheap"
             reasons.append("cheap task policy")
         elif task_type in cfg["standard_task_types"]:
@@ -171,38 +183,55 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
         # Unknown stays standard. Low confidence on a known cheap route rises to Sol.
         if task_type != "unknown" and signals["confidence"] < float(cfg["low_confidence_threshold"]):
             promoted = _next_tier(candidate_tier, tiers)
+            if promoted == "strong" and not (context.get("force_strong") or task_type in set(cfg["force_strong_task_types"]) | set(cfg["high_value_task_types"])):
+                promoted = candidate_tier
             if candidate_tier == "cheap" and promoted != candidate_tier:
                 candidate_tier = promoted
                 reasons.append("low classifier confidence: escalated one tier")
         candidate_model = tiers[candidate_tier]["model"]
 
-    routing_keys = {"current_model", "force_model", "force_strong", "force_cheap", "handoff_context_tokens", "handoff_read_tokens", "parent_handoff_tokens", "input_tokens", "work_scope", "independent", "assessment"}
+    routing_keys = {"current_model", "force_model", "force_strong", "force_cheap", "approval_granted", "handoff_context_tokens", "handoff_read_tokens", "parent_handoff_tokens", "parent_remaining_input_tokens", "input_tokens", "child_input_tokens", "stay_cached_input_tokens", "child_cached_input_tokens", "work_scope", "independent", "assessment"}
     input_text = task + "\n" + json.dumps({k: v for k, v in context.items() if k not in routing_keys}, sort_keys=True, default=str)
     counted_tokens, token_method = estimate_tokens(input_text, current_model)
     input_tokens = int(context["input_tokens"]) if context.get("input_tokens") is not None else counted_tokens
     if context.get("input_tokens") is not None:
         token_method = "provided input_tokens"
+    child_input_tokens = max(0, int(context.get("child_input_tokens", input_tokens)))
+    child_input_source = "provided child_input_tokens" if context.get("child_input_tokens") is not None else "same as input_tokens"
+    stay_cached_tokens = max(0, int(context.get("stay_cached_input_tokens", 0)))
+    child_cached_tokens = max(0, int(context.get("child_cached_input_tokens", 0)))
     output_tokens = int(cfg["expected_output_tokens"].get(signals["expected_output_bucket"], cfg["expected_output_tokens"]["normal"]))
     handoff_tokens = max(0, int(context.get("handoff_context_tokens", cfg["handoff_context_tokens"]))) + max(0, int(context.get("handoff_read_tokens", cfg["handoff_read_tokens"])))
 
     # A capability alias does not establish the aliased model's price.
     current_spec = tiers.get(current_tier) if _tier_for_model(current_model, tiers) else None
     # The parent reads the child's output back as input, plus its own handoff/review work.
-    parent_tokens = max(0, int(context.get("parent_handoff_tokens", cfg["parent_handoff_tokens"]))) + output_tokens
+    parent_tokens = (max(0, int(context.get("parent_remaining_input_tokens", cfg["parent_remaining_input_tokens"])))
+                     + max(0, int(context.get("parent_handoff_tokens", cfg["parent_handoff_tokens"]))) + output_tokens)
     parent_cost = _cost(current_spec, parent_tokens, 0)
 
-    def estimate(model: str, spec: Mapping[str, Any] | None, extra_tokens: int) -> dict[str, Any]:
-        cost = _cost(spec, input_tokens + extra_tokens, output_tokens)
-        parent = parent_cost if extra_tokens else None
-        if extra_tokens and cost is not None:
+    def estimate(model: str, spec: Mapping[str, Any] | None, extra_tokens: int,
+                 include_parent: bool = True, base_input: int = input_tokens,
+                 cached_tokens: int = stay_cached_tokens, input_source: str = "current input_tokens") -> dict[str, Any]:
+        total_input = base_input + extra_tokens
+        effective_cached = min(max(0, cached_tokens), base_input)
+        cost = _cost(spec, total_input, output_tokens, effective_cached)
+        parent = parent_cost if include_parent else None
+        if include_parent and cost is not None:
             cost = None if parent is None else round(cost + parent, 8)
-        return {"model": model, "estimated_input_tokens": input_tokens + extra_tokens,
+        return {"model": model, "estimated_input_tokens": total_input,
+                "base_input_tokens": base_input, "cached_input_tokens": effective_cached,
+                "input_token_source": input_source,
                 "estimated_output_tokens": output_tokens, "handoff_input_tokens": extra_tokens,
                 "parent_overhead_usd": parent, "estimated_cost_usd": cost}
 
-    estimates = {"stay": estimate(current_model, current_spec, 0)}
-    estimates.update({name: estimate(spec["model"], spec, handoff_tokens) for name, spec in tiers.items()})
-    candidate_estimate = estimates[candidate_tier] if candidate_tier else estimate(candidate_model, None, handoff_tokens)
+    estimates = {"stay": estimate(current_model, current_spec, 0, include_parent=False)}
+    estimates.update({name: estimate(spec["model"], spec, handoff_tokens, base_input=child_input_tokens,
+                                     cached_tokens=child_cached_tokens, input_source=child_input_source)
+                      for name, spec in tiers.items()})
+    candidate_estimate = estimates[candidate_tier] if candidate_tier else estimate(
+        candidate_model, None, handoff_tokens, base_input=child_input_tokens,
+        cached_tokens=child_cached_tokens, input_source=child_input_source)
     if candidate_tier is None:
         estimates["forced"] = candidate_estimate
     stay_cost = estimates["stay"]["estimated_cost_usd"]
@@ -210,7 +239,12 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
     explicit = bool(forced_model or context.get("force_strong") or context.get("force_cheap")
                     or task_type in set(cfg["force_strong_task_types"]) | set(cfg["high_value_task_types"]))
 
-    if candidate_model == current_model:
+    approval_required = (candidate_tier == "strong" and candidate_model != current_model
+                         and context.get("approval_granted") is not True)
+    if approval_required:
+        action = "request_approval"
+        reasons.append("Astra requires explicit approval")
+    elif candidate_model == current_model:
         action = "stay"
         reasons.append("already in selected model")
     elif explicit or (current_tier == "cheap" and candidate_tier in ("standard", "strong")):
@@ -229,14 +263,14 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
     elif not (context.get("work_scope") == "substantial" and context.get("independent") is True):
         action = "stay"
         reasons.append("small or coupled work: keep execution local")
-    elif child_cost < stay_cost:
+    elif child_cost < stay_cost * (1 - max(0.0, min(1.0, float(cfg["minimum_savings_fraction"])))):
         action = "delegate"
-        reasons.append("child cost including handoff is lower")
+        reasons.append("child cost including handoff clears minimum savings margin")
     else:
         action = "stay"
         reasons.append("handoff does not pay")
 
-    selected = estimates["stay"] if action == "stay" else candidate_estimate
+    selected = estimates["stay"] if action in ("stay", "request_approval") else candidate_estimate
     if selected["estimated_cost_usd"] is None:
         reasons.append("pricing unavailable; cost not estimated")
     if classifier_error:
@@ -245,9 +279,10 @@ def route_task(task: str, context: Mapping[str, Any] | None = None, config: Mapp
     return {
         "action": action,
         "model": selected["model"],
-        "tier": current_tier if action == "stay" else candidate_tier,
+        "tier": current_tier if action in ("stay", "request_approval") else candidate_tier,
         "candidate_model": candidate_model,
         "candidate_tier": candidate_tier,
+        "approval_required": approval_required,
         "estimates": estimates,
         "task_type": task_type,
         "complexity": signals["complexity"],
@@ -322,7 +357,9 @@ if __name__ == "__main__":
     context = {"current_model": args.current_model, "work_scope": args.work_scope,
                "independent": args.independent}
     if args.task_type:
-        context["assessment"] = {"task_type": args.task_type, "complexity": 0.5, "confidence": 1.0, "expected_output_bucket": "normal"}
+        complexity = 0.25 if args.task_type in DEFAULT_CONFIG["cheap_task_types"] else 0.5
+        context["assessment"] = {"task_type": args.task_type, "complexity": complexity,
+                                  "confidence": 1.0, "expected_output_bucket": "normal"}
     if args.input_tokens is not None:
         context["input_tokens"] = args.input_tokens
     print(json.dumps(route_task(task, context=context, config=config), indent=2))
