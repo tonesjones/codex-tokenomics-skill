@@ -3,9 +3,10 @@
 This repository contains the small, reusable portion of my personal Codex setup:
 
 - `AGENTS.md`: global engineering and model-routing guidance.
-- `skills/tokenomics/`: a delegation, review, and escalation workflow plus an optional dependency-free router/cost estimator. Its default tier mapping is GPT-6 Luna → GPT-6 Sol → GPT-6 Astra, but projects can supply their own model IDs and current prices.
+- `skills/tokenomics/`: a dependency-free delegation workflow and selective subscription usage audit. Sol 6.1 owns the task; Luna handles worthwhile bounded work; Astra requires explicit approval.
 - `pstack-models.md`: Poteto Mode's per-role model configuration, installed to `$env:USERPROFILE\.agents\pstack-models.md`.
-- `install.ps1`: installs those files and applies four portable Codex preferences.
+- `install.ps1`: restores the full configuration and applies four portable Codex preferences.
+- `install_skill.py`: updates only Tokenomics on Windows, macOS or Linux.
 
 ## Restore on Windows
 
@@ -28,6 +29,28 @@ service_tier = "default"
 
 Start a new Codex task after installation. A full application restart is normally unnecessary.
 
+## Update only the skill
+
+The cross-platform installer changes only Tokenomics, backs up an existing installation, and verifies file hashes. It does not change global guidance, model settings or Poteto roles.
+
+```powershell
+python install_skill.py
+# Or update an explicit existing location:
+python install_skill.py --target "$env:USERPROFILE\.codex\skills\tokenomics"
+```
+
+For a cloud or local project, install into its repository skill-discovery location:
+
+```bash
+python3 /path/to/codex-tokenomics-skill/install_skill.py --repo-root /path/to/project
+```
+
+Run this once in environment setup, or commit the installed `.agents/skills/tokenomics` files in the target project. Updating the Windows installation does not update cloud environments. The current repository keeps its maintained source under `skills/tokenomics`.
+
+Codex discovers repository skills under `.agents/skills` and user skills under `~/.agents/skills`. The installer preserves this project's existing legacy `~/.codex/skills/tokenomics` installation when appropriate. See [official skill-discovery guidance](https://learn.chatgpt.com/docs/build-skills). Newly loaded sessions can use the updated skill; restart Codex if it does not appear.
+
+Routing and outcome records work on local and cloud sessions. Runtime measurement works only when the environment exposes explicitly associated session metadata. For cloud sessions without accessible logs, record the actual runtime session ID, `environment="cloud"` and `path=None`; usage stays unknown. This path has fixture coverage. No live cloud token-export access or cross-account installation is claimed.
+
 ## Tokenomics routing
 
 Tokenomics keeps GPT-6.1 Sol responsible for a substantial task from planning through final review. It considers a bounded Luna child when its work is independent and the handoff pays. A router recommendation does not change the selected model or reasoning effort.
@@ -42,15 +65,21 @@ Do small or coupled work in Sol. A new model may need context reconstruction, wh
 
 Use `$tokenomics` when you specifically want a fresh routing assessment, such as after a task’s scope changes. You do not need to invoke it on every task: the global `AGENTS.md` contains the same routing checkpoint.
 
-For a calling project that needs a programmatic decision, copy `skills/tokenomics/tokenomics_router.py` and call `route_task(task, context=None, config=None)`. It returns `stay`, `delegate`, or `request_approval` for Astra. The caller must verify authorization immediately before any Astra dispatch. Unknown prices remain `None`. Estimates are useful only with realistic remaining Sol work, compact child input, and measured cache behavior. `record_result` can write local JSONL usage; `summarize_usage` provides feedback. See the skill's `SKILL.md` for a minimal example and optional Jev classifier boundary.
+The portable `route_task(task, context=None, config=None)` interface returns `stay`, `delegate`, or `request_approval`. Supply the observed current model; missing identity stays unresolved. Routing is qualitative. No pricing, credits, billing integrations or dashboard are used.
 
-In Codex, the global guidance calls `$tokenomics` at the planning checkpoint for substantial, independent, bounded work. When prices are unavailable, it may recommend Luna qualitatively while marking dollar savings unverified. Sol performs and verifies the handoff and retains final responsibility.
+`record_result` and `summarize_usage` share stable decision IDs and preserve the original routing fields. Child usability and full-task acceptance are separate. Retrospective checkpoints are explicit, and legacy records without IDs stay unpaired. The `success` argument remains a full-task acceptance alias; arbitrary usage dictionaries no longer overwrite decision metadata.
 
-### When to add Jev
+For a selective audit, `associate_sessions` records only explicitly named parent and child sessions. `collect_usage` reads their runtime metadata and cumulative counters, including cache input, observed model and effort. Include handoff, review, required review children, retries and recovery. Repeated counters and repeated audits do not double-count. Missing baselines, ambiguous resets, open intervals and absent fields remain unknown. The collector stores metadata, not chat text. See [the skill instructions](skills/tokenomics/SKILL.md) for examples and interval requirements.
 
-Start with the local classifier and log the actual results. Jev becomes useful when ambiguous task descriptions repeatedly cause the local rules to choose a tier that is too weak or unnecessarily strong, and there are enough routed tasks for a classification call to repay its cost and latency. Review a few dozen representative logged tasks (20–50 is a starting sample, not a proven threshold), compare Jev's classification against the local rule on those same tasks, and enable it only if the decisions improve.
+```powershell
+python skills/tokenomics/tokenomics_router.py --log .tokenomics/decisions.jsonl --collect DECISION_ID
+python skills/tokenomics/tokenomics_router.py --log .tokenomics/decisions.jsonl --summary
+python -m unittest discover -s tests -v
+```
 
-Jev can supply task type, complexity, expected output size, and confidence; Tokenomics still chooses the model and calculates dollars. A project can pass a Jev-backed `classifier` callable without changing the public `route_task` call. The current repository includes that callable boundary **but no Jev HTTP adapter or live Jev verification**. The tests use fixed signals and a simulated classifier failure, so they run without a TypeSafe API key. A live integration would need the key, a checked request/response mapping, and calibration against your own tasks. If that classifier fails, the local fallback continues to route.
+Audits run when requested, not each turn. `record_comparison` records occasional equivalent Sol-only and Sol-plus-Luna pairs with the same acceptance checks, coordination, review and recovery. Reports show token consumption by model and time per accepted result, with effort/cache conditions. They never claim exact subscription allowance savings. No baseline means savings are unknown. Optional account snapshots are account-wide and may include concurrent chats or resets.
+
+Tests use fixtures. [CHECKPOINT.md](CHECKPOINT.md) records separate live-session verification and the local review checkpoint. Runtime JSONL and snapshots stay ignored by Git.
 
 When Poteto Mode is active in Codex, its harness instructions read `~/.agents/pstack-models.md` when present. That file assigns models to Poteto agent roles and overrides its defaults. `install.ps1` copies this repository's `pstack-models.md` to `$env:USERPROFILE\.agents\pstack-models.md`, even when `CODEX_HOME` points elsewhere.
 
@@ -70,4 +99,4 @@ The allowlist-style `.gitignore` prevents accidental tracking of everything exce
 
 Do not weaken the `.gitignore` allowlist without reviewing every newly included file for credentials and machine-specific data.
 
-The skill accepts an agent-assessed task type through `--task-type` and uses GPT-6.1 Sol by default and recognizes legacy GPT-6 Sol capability without borrowing model prices. Update only the skill folder to preserve unrelated global settings. Keep backups outside discoverable skills directories.
+The skill accepts an agent-assessed task type through `--task-type` and uses GPT-6.1 Sol by default and recognizes legacy GPT-6 Sol capability. Update only the skill folder to preserve unrelated global settings. Keep backups outside discoverable skills directories.

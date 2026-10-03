@@ -13,3 +13,7 @@
 !skills/tokenomics/agents/openai.yaml
 !tests/
 !tests/test_tokenomics_router.py
+
+!CHECKPOINT.md
+
+!install_skill.py
