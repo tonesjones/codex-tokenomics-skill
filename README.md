@@ -1,102 +1,119 @@
-# Portable Codex configuration
+# Use Tokenomics in Codex
 
-This repository contains the small, reusable portion of my personal Codex setup:
+Tokenomics helps you delegate bounded work to Luna while keeping GPT-6.1 Sol responsible for the task. You can also audit selected tasks to compare observed token use, cache use, and time. Tokens do not measure exact Codex subscription allowance, and savings remain unknown without an equivalent baseline.
 
-- `AGENTS.md`: global engineering and model-routing guidance.
-- `skills/tokenomics/`: a dependency-free delegation workflow and selective subscription usage audit. Sol 6.1 owns the task; Luna handles worthwhile bounded work; Astra requires explicit approval.
-- `pstack-models.md`: Poteto Mode's per-role model configuration, installed to `$env:USERPROFILE\.agents\pstack-models.md`.
-- `install.ps1`: restores the full configuration and applies four portable Codex preferences.
-- `install_skill.py`: updates only Tokenomics on Windows, macOS or Linux.
+## Update only the skill
 
-## Restore on Windows
+To install or update Tokenomics, use Python and Git. If you already have a checkout, skip step 1 and use its directory in step 2.
 
-Clone the repository, open PowerShell in its directory, and run:
+1. Clone the repository:
+
+   ```powershell
+   git clone https://github.com/tonesjones/codex-tokenomics-skill.git
+   ```
+
+2. Enter the repository directory:
+
+   ```powershell
+   cd codex-tokenomics-skill
+   ```
+
+3. Update the checkout from `main`:
+
+   ```powershell
+   git pull --ff-only origin main
+   ```
+
+4. Run the skill installer:
+
+   ```powershell
+   python install_skill.py
+   ```
+
+On macOS or Linux, use `python3` if `python` is unavailable.
+
+The installer copies the skill's managed files and verifies their hashes. It backs up an existing installation under this checkout's `.tokenomics/install-backups` directory and prints the backup path. Your global guidance, model settings, and Poteto roles stay unchanged.
+
+By default, the installer uses `~/.agents/skills/tokenomics`. If `~/.codex/skills/tokenomics` exists and the newer location does not, the installer updates that existing folder.
+
+To update an explicit installation on Windows, run:
+
+```powershell
+python install_skill.py --target "$env:USERPROFILE\.codex\skills\tokenomics"
+```
+
+Start a new Codex task to load the updated instructions. If the skill does not appear, restart Codex. See the [official skill discovery guide](https://learn.chatgpt.com/docs/build-skills) for supported locations.
+
+## Install the skill in a project
+
+To make Tokenomics available in a local or cloud project, run the installer with the target repository's path. Replace `/path/to/project` with that path:
+
+```bash
+python3 install_skill.py --repo-root /path/to/project
+```
+
+Run this command from the Tokenomics checkout. The installer copies the skill into the target repository's `.agents/skills/tokenomics` directory. Keep the maintained source in this repository under `skills/tokenomics`.
+
+For cloud use, add the command to environment setup or commit the installed skill files in the target repository. Configure each cloud environment or repository once. Updating your local installation does not update cloud environments.
+
+Routing and outcome records work in both environments. Token measurement requires accessible session metadata. If a cloud session has no accessible log, associate its actual runtime ID with `environment="cloud"` and `path=None`. The collector reports unknown usage. Live cloud collection remains unverified.
+
+## Use Tokenomics
+
+Invoke `$tokenomics` when a substantial task has bounded work that Luna can complete independently. Keep small or coupled tasks in Sol without another routing check.
+
+Keep Sol responsible for planning, integration, and final review. Delegate only when the expected benefit exceeds preparation, review, and possible recovery. Return inadequate Luna work to Sol. Use Astra only after explicit approval for the specific question.
+
+Verify the child's model through runtime metadata. Record whether its output is usable separately from whether the full task meets the acceptance checks. A routing recommendation alone does not establish that delegation worked or saved usage.
+
+Follow the [Tokenomics skill instructions](skills/tokenomics/SKILL.md) for execution and record examples. The skill cannot change the current model or reasoning effort.
+
+## Audit a selected task
+
+Ask Codex to audit a selected task when you need usage evidence. The skill maintains the decision, outcome, and session associations. You do not need to run an audit each turn or keep a separate manual log.
+
+After the skill records a decision and associates its sessions, collect its measurements. Replace `DECISION_ID` with the recorded ID:
+
+```powershell
+python skills/tokenomics/tokenomics_router.py --log .tokenomics/decisions.jsonl --collect DECISION_ID
+```
+
+Then summarize the log:
+
+```powershell
+python skills/tokenomics/tokenomics_router.py --log .tokenomics/decisions.jsonl --summary
+```
+
+Run these commands from this checkout. From another project, use the router path in that project's installed skill folder.
+
+Include the parent session's preparation, review, and recovery work, plus every related child. Label children created for Tokenomics separately from reviews required by another skill. The collector reads only explicitly associated sessions and stores metadata and measurements, without message text, source code, or credentials.
+
+Read measurement coverage alongside the totals. Missing fields, ambiguous counter resets, and incomplete intervals remain unknown. Cached input is part of total input. Estimates stay separate from observations. Account snapshots describe account-wide usage and can include concurrent chats or resets.
+
+For an occasional comparison, use equivalent Sol-only and Sol-plus-Luna tasks with the same acceptance checks. Include coordination, review, and recovery in both runs. Record effort and cache conditions. Compare consumption and time per accepted result without claiming exact subscription savings. Record existing runs through the skill's comparison workflow. Do not duplicate tasks just to populate a report.
+
+See [CHECKPOINT.md](CHECKPOINT.md) for fixture results and the separate live local verification.
+
+## Verify a change
+
+Run the focused tests from this checkout:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+Check the [skill instructions](skills/tokenomics/SKILL.md) against the implementation before changing routing or measurement behavior. Keep runtime logs, session metadata, and installation backups out of Git. The repository's [`.gitignore`](.gitignore) allows only the maintained configuration, skill, installer, test, and documentation files.
+
+## Restore the bundled Windows configuration
+
+To restore the accompanying global guidance and model preferences, use the full installer:
 
 ```powershell
 .\install.ps1
 ```
 
-The installer targets `$env:CODEX_HOME` when set, otherwise `$env:USERPROFILE\.codex`. It backs up any replaced global guidance, configuration, or earlier routing-skill folder beneath `.codex\backups\tokenomics-<timestamp>`.
+This command also installs `AGENTS.md` and `pstack-models.md` and updates model preferences in `config.toml`. Review [install.ps1](install.ps1) before running it. Use `install_skill.py` for a skill-only update.
 
-It also sets these portable top-level preferences in the existing `config.toml` without replacing machine-specific sections:
+The full installer uses `$env:CODEX_HOME` when set, otherwise `$env:USERPROFILE\.codex`. It writes backups beneath that directory's `backups/tokenomics-<timestamp>` folder. Poteto roles go to `$env:USERPROFILE\.agents\pstack-models.md`.
 
-```toml
-model = "gpt-6.1-sol"
-model_reasoning_effort = "low"
-personality = "pragmatic"
-service_tier = "default"
-```
-
-Start a new Codex task after installation. A full application restart is normally unnecessary.
-
-## Update only the skill
-
-The cross-platform installer changes only Tokenomics, backs up an existing installation, and verifies file hashes. It does not change global guidance, model settings or Poteto roles.
-
-```powershell
-python install_skill.py
-# Or update an explicit existing location:
-python install_skill.py --target "$env:USERPROFILE\.codex\skills\tokenomics"
-```
-
-For a cloud or local project, install into its repository skill-discovery location:
-
-```bash
-python3 /path/to/codex-tokenomics-skill/install_skill.py --repo-root /path/to/project
-```
-
-Run this once in environment setup, or commit the installed `.agents/skills/tokenomics` files in the target project. Updating the Windows installation does not update cloud environments. The current repository keeps its maintained source under `skills/tokenomics`.
-
-Codex discovers repository skills under `.agents/skills` and user skills under `~/.agents/skills`. The installer preserves this project's existing legacy `~/.codex/skills/tokenomics` installation when appropriate. See [official skill-discovery guidance](https://learn.chatgpt.com/docs/build-skills). Newly loaded sessions can use the updated skill; restart Codex if it does not appear.
-
-Routing and outcome records work on local and cloud sessions. Runtime measurement works only when the environment exposes explicitly associated session metadata. For cloud sessions without accessible logs, record the actual runtime session ID, `environment="cloud"` and `path=None`; usage stays unknown. This path has fixture coverage. No live cloud token-export access or cross-account installation is claimed.
-
-## Tokenomics routing
-
-Tokenomics keeps GPT-6.1 Sol responsible for a substantial task from planning through final review. It considers a bounded Luna child when its work is independent and the handoff pays. A router recommendation does not change the selected model or reasoning effort.
-
-| Model | Use it for |
-| --- | --- |
-| GPT-6 Luna | Bounded, low-ambiguity collection, mechanical changes, defined tests, and well-scoped implementation when the handoff is worthwhile. |
-| GPT-6.1 Sol | Session ownership, planning, architecture, difficult debugging, integration, and final review. Start at low effort for routine work, medium for normal planning, and high for difficult reasoning, changing runtime effort only when supported and useful. |
-| GPT-6 Astra | An exceptional consultation about a specific unresolved problem, after explicit human approval for that use. Sol integrates and reviews its result. |
-
-Do small or coupled work in Sol. A new model may need context reconstruction, while continuing in Sol may reuse cached input; neither cache behavior nor savings are guaranteed. Compare the future Sol work against Luna execution plus Sol preparation, review, and possible recovery. A difficult task does not become suitable for Luna just because it is labeled “test.” Return an inadequate Luna result to Sol rather than repeatedly retrying Luna.
-
-Use `$tokenomics` when you specifically want a fresh routing assessment, such as after a task’s scope changes. You do not need to invoke it on every task: the global `AGENTS.md` contains the same routing checkpoint.
-
-The portable `route_task(task, context=None, config=None)` interface returns `stay`, `delegate`, or `request_approval`. Supply the observed current model; missing identity stays unresolved. Routing is qualitative. No pricing, credits, billing integrations or dashboard are used.
-
-`record_result` and `summarize_usage` share stable decision IDs and preserve the original routing fields. Child usability and full-task acceptance are separate. Retrospective checkpoints are explicit, and legacy records without IDs stay unpaired. The `success` argument remains a full-task acceptance alias; arbitrary usage dictionaries no longer overwrite decision metadata.
-
-For a selective audit, `associate_sessions` records only explicitly named parent and child sessions. `collect_usage` reads their runtime metadata and cumulative counters, including cache input, observed model and effort. Include handoff, review, required review children, retries and recovery. Repeated counters and repeated audits do not double-count. Missing baselines, ambiguous resets, open intervals and absent fields remain unknown. The collector stores metadata, not chat text. See [the skill instructions](skills/tokenomics/SKILL.md) for examples and interval requirements.
-
-```powershell
-python skills/tokenomics/tokenomics_router.py --log .tokenomics/decisions.jsonl --collect DECISION_ID
-python skills/tokenomics/tokenomics_router.py --log .tokenomics/decisions.jsonl --summary
-python -m unittest discover -s tests -v
-```
-
-Audits run when requested, not each turn. `record_comparison` records occasional equivalent Sol-only and Sol-plus-Luna pairs with the same acceptance checks, coordination, review and recovery. Reports show token consumption by model and time per accepted result, with effort/cache conditions. They never claim exact subscription allowance savings. No baseline means savings are unknown. Optional account snapshots are account-wide and may include concurrent chats or resets.
-
-Tests use fixtures. [CHECKPOINT.md](CHECKPOINT.md) records separate live-session verification and the local review checkpoint. Runtime JSONL and snapshots stay ignored by Git.
-
-When Poteto Mode is active in Codex, its harness instructions read `~/.agents/pstack-models.md` when present. That file assigns models to Poteto agent roles and overrides its defaults. `install.ps1` copies this repository's `pstack-models.md` to `$env:USERPROFILE\.agents\pstack-models.md`, even when `CODEX_HOME` points elsewhere.
-
-## Rollback
-
-Use ordinary Git history to select the desired configuration version, then rerun `install.ps1`. The installer’s timestamped backup provides a local pre-install copy when needed.
-
-## Intentionally excluded
-
-The allowlist-style `.gitignore` prevents accidental tracking of everything except the files named above. In particular, this repository excludes:
-
-- `auth.json`, credentials, API keys, OAuth tokens, secrets, and MCP headers.
-- Full `config.toml`, because it contains machine paths, plugin state, project trust records, connector settings, and environment-specific MCP configuration.
-- Sessions, history, memories, databases, caches, logs, attachments, generated media, browser state, installation identifiers, and temporary state.
-- Bundled/system skills, plugins, marketplaces, and downloaded packages.
-- The custom `bd` skill and proprietary local documentation dependencies.
-
-Do not weaken the `.gitignore` allowlist without reviewing every newly included file for credentials and machine-specific data.
-
-The skill accepts an agent-assessed task type through `--task-type` and uses GPT-6.1 Sol by default and recognizes legacy GPT-6 Sol capability. Update only the skill folder to preserve unrelated global settings. Keep backups outside discoverable skills directories.
+To roll back a skill update, restore its folder from the backup path printed by `install_skill.py`. To restore an older full configuration, select that version in Git and rerun `install.ps1`.
